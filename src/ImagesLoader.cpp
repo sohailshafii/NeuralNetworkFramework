@@ -18,6 +18,7 @@
 #include <thread>
 #include <cassert>
 #include <format>
+#include <stdexcept>
 
 #define TARGET_IMAGE_SIZE 64 // down from 256
 #define EXPECTED_CHANNELS 3
@@ -37,6 +38,12 @@ ImageLoader::ImageLoader(const std::string& positiveLabel,
     }
 }
 
+void ImageLoader::PrintMetadata() {
+    std::cout << "Number of samples: " << data.size()
+        << ", width and height of each image: " << TARGET_IMAGE_SIZE << " x " << TARGET_IMAGE_SIZE
+        << ", num channels: " << EXPECTED_CHANNELS << ", number of features: " << GetNumberOfFeatures() << "\n";
+}
+
 void ImageLoader::LoadDataSerial(const std::vector<std::string>& filePaths,
                                  const std::string& positiveLabel,
                                  const std::string& parentFolder,
@@ -44,19 +51,24 @@ void ImageLoader::LoadDataSerial(const std::vector<std::string>& filePaths,
     unsigned int numFeatures = GetNumberOfFeatures();
     // outputted to file in case people want to debug what is stored in memory.
     std::vector<unsigned char> testImage(numFeatures, 0);
-    std::vector<float> output(numFeatures, 0.0f);
     for (auto path : filePaths) {
         int width, height, channels;
         // positive means Y = 1, otherwise it is 0.
         size_t pos = path.find_last_of("/\\");
         std::string filename = (pos == std::string::npos) ? path : path.substr(pos + 1);
-        fileNames.emplace_back(filename);
         float yValue = filename.find(positiveLabel) != std::string::npos ? 1.0f : 0.0f;
         unsigned char* img = stbi_load(path.c_str(), &width, &height, &channels, 0);
-        assert(img != nullptr && (std::format("Could not load image at path {}.", path).c_str()));
+        if (img == nullptr) {
+            throw std::runtime_error(std::format("Could not load image at path {}.", path));
+        }
+        if (channels != EXPECTED_CHANNELS) {
+            stbi_image_free(img);
+            throw std::runtime_error(std::format("Channels {} vs expected {}.", channels, EXPECTED_CHANNELS));
+        }
         assert(channels == EXPECTED_CHANNELS);
         // force a resize
-        ResizeNearest(img, width, height, channels, output.data(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE);
+        data.emplace_back(numFeatures);
+        ResizeNearest(img, width, height, channels, data.back().data(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE);
         
         if (outputTestImages) {
             std::filesystem::path p(path);
@@ -64,15 +76,16 @@ void ImageLoader::LoadDataSerial(const std::vector<std::string>& filePaths,
             std::string newName = p.stem().string() + "-small.jpg";
             std::filesystem::path newPath = p.parent_path() / newName;
             // Quality only applies to JPG (1–100)
+            float* currImage = data.back().data();
             for (unsigned int i = 0; i < numFeatures; i++) {
-                testImage[i] = (unsigned char)output[i];
+                testImage[i] = (unsigned char)currImage[i];
             }
             int quality = 90;
             stbi_write_jpg(newPath.string().c_str(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE,
                            EXPECTED_CHANNELS, testImage.data(), quality);
         }
-
-        data.push_back(output);
+        
+        fileNames.emplace_back(filename);
         yValues.push_back(yValue);
         stbi_image_free(img);
     }
@@ -82,15 +95,84 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
                       const std::string& positiveLabel,
                       const std::string& parentFolder,
                       bool outputTestImages) {
-    std::mutex queueMutex, dataMutex;
-    std::condition_variable cv;
-    std::queue<std::string> taskQueue;
-    std::atomic<bool> done{false};
+    unsigned int numFeatures = GetNumberOfFeatures();
+    size_t numImages = filePaths.size();
+
+    // every worker writes to its own slot, so no lock is needed on the results
+    // and the row order matches filePaths -- same as LoadDataSerial.
+    data.assign(numImages, std::vector<float>(numFeatures, 0.0f));
+    yValues.assign(numImages, 0.0f);
+    fileNames.assign(numImages, std::string());
+
     std::vector<std::thread> workers;
-    int maxThreads = std::thread::hardware_concurrency();
-    
-    for(const auto& path : filePaths) {
-        taskQueue.push(path);
+    std::atomic<size_t> nextIndex{0};
+    // an exception thrown in a worker cannot escape its thread -- that calls
+    // std::terminate. Stash the first one and rethrow it after the join.
+    std::mutex errorMutex;
+    std::exception_ptr firstError;
+    std::atomic<bool> aborted{false};
+
+    auto worker = [&]() {
+      try {
+        for (size_t i = nextIndex.fetch_add(1); i < numImages && !aborted;
+             i = nextIndex.fetch_add(1)) {
+            const std::string& path = filePaths[i];
+
+            int width, height, channels;
+            size_t pos = path.find_last_of("/\\");
+            std::string filename = (pos == std::string::npos) ? path : path.substr(pos + 1);
+            // positive means Y = 1, otherwise it is 0.
+            float yValue = filename.find(positiveLabel) != std::string::npos ? 1.0f : 0.0f;
+
+            // NOTE: libjpeg-turbo is faster, consider for future.
+            unsigned char* img = stbi_load(path.c_str(), &width, &height, &channels, 0);
+
+            if (img == nullptr) {
+                throw std::runtime_error(std::format("Could not load image at path {}.", path));
+            }
+            if (channels != EXPECTED_CHANNELS) {
+                stbi_image_free(img);
+                throw std::runtime_error(std::format("Channels {} vs expected {}.", channels, EXPECTED_CHANNELS));
+            }
+
+            // force a resize, straight into this image's row
+            ResizeNearest(img, width, height, channels, data[i].data(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE);
+            stbi_image_free(img);
+
+            fileNames[i] = std::move(filename);
+            yValues[i] = yValue;
+        }
+      }
+      catch (...) {
+          // first failure wins; the rest of the pool stops at the loop check.
+          std::lock_guard<std::mutex> lock(errorMutex);
+          if (!firstError) {
+              firstError = std::current_exception();
+          }
+          aborted = true;
+      }
+    };
+
+    // hardware_concurrency() is allowed to return 0, and there is no point
+    // spawning more threads than there are images.
+    unsigned int hwThreads = std::thread::hardware_concurrency();
+    size_t maxThreads = hwThreads == 0 ? 1 : hwThreads;
+    if (maxThreads > numImages) {
+        maxThreads = numImages;
+    }
+
+    for (size_t i = 0; i < maxThreads; i++) {
+        workers.emplace_back(worker);
+    }
+
+    for (auto& thread : workers) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    if (firstError) {
+        std::rethrow_exception(firstError);
     }
 }
 

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <chrono>
 #include "ImagesLoader.h"
 
 typedef struct TrainingArguments {
@@ -23,13 +24,35 @@ int main(int argc, char** argv) {
         return parseReturnVal;
     }
     
-    ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.testPath);
+    if (trainingArgs.testPath == "") {
+        std::cerr << "No test path given!\n";
+        PrintUsage();
+        return 1;
+    }
     
+    std::cout << "Loading all images...\n";
+    auto loadStart = std::chrono::steady_clock::now();
+
+    ImageLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
+                         trainingArgs.runParallel);
+    ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
+                             trainingArgs.runParallel);
+    
+    std::cout << "Training metadata: \n";
+    trainingData.PrintMetadata();
+    std::cout << "Testing metadata: \n";
+    testData.PrintMetadata();
+    
+    auto loadEnd = std::chrono::steady_clock::now();
+    auto loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
+    std::cout << "Loaded images in " << loadMs << " ms ("
+              << (trainingArgs.runParallel ? "parallel" : "serial") << ").\n";
+
     return 0;
 }
 
 void PrintUsage() {
-    std::cout << "Arguments expected: -train <training_path> -test <test_path> -posLabel <positive_label>\n";
+    std::cout << "Arguments expected: -train <training_path> -test <test_path> -posLabel <positive_label> -parallel <1_or_0>\n";
 }
 
 char* TryGetArgument(int argIndex, int argc, char **argv) {

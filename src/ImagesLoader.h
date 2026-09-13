@@ -21,6 +21,7 @@ public:
         return TARGET_IMAGE_SIZE*TARGET_IMAGE_SIZE*EXPECTED_CHANNELS;
     }
     
+    void PrintMetadata();
 private:
     std::vector<std::vector<float>> data;
     std::vector<float> yValues;
