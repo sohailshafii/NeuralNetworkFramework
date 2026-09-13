@@ -22,10 +22,13 @@ public:
     }
     
     void PrintMetadata();
+    
+    void NormalizeData(bool runInParallel = false);
 private:
     std::vector<std::vector<float>> data;
     std::vector<float> yValues;
     std::vector<std::string> fileNames;
+    bool normalized;
     
     void LoadDataSerial(const std::vector<std::string>& filePaths,
                         const std::string& positiveLabel,
@@ -40,4 +43,7 @@ private:
     std::vector<std::string> GetFilesInPath(const std::string& path);
     void ResizeNearest(unsigned char* src, int oldWidth, int oldHeight, int channels,
                   float* dst, int newWidth, int newHeight);
+    
+    void NormalizeDataSerial();
+    void NormalizeDataParallel();
 };

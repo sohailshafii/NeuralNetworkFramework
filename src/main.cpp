@@ -47,6 +47,14 @@ int main(int argc, char** argv) {
     auto loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
     std::cout << "Loaded images in " << loadMs << " ms ("
               << (trainingArgs.runParallel ? "parallel" : "serial") << ").\n";
+    
+    std::cout << "Normalizing...\n";
+    loadStart = std::chrono::steady_clock::now();
+    testData.NormalizeData();
+    trainingData.NormalizeData();
+    loadEnd = std::chrono::steady_clock::now();
+    loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
+    std::cout << "Done normalizing, it took: " << loadMs << "ms.\n";
 
     return 0;
 }

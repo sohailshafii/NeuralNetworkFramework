@@ -29,7 +29,7 @@ ImageLoader::ImageLoader(const std::string& positiveLabel,
                          bool outputTestImages) {
     std::vector<std::string> filePaths = GetFilesInPath(parentFolder);
     std::cout << "Found " << filePaths.size() << " images in path " << parentFolder << ".\n";
-    
+    normalized = false;
     if (runInParallel) {
         LoadDataParallel(filePaths, positiveLabel, parentFolder, outputTestImages);
     }
@@ -42,6 +42,20 @@ void ImageLoader::PrintMetadata() {
     std::cout << "Number of samples: " << data.size()
         << ", width and height of each image: " << TARGET_IMAGE_SIZE << " x " << TARGET_IMAGE_SIZE
         << ", num channels: " << EXPECTED_CHANNELS << ", number of features: " << GetNumberOfFeatures() << "\n";
+}
+
+void ImageLoader::NormalizeData(bool runInParallel) {
+    if (normalized) {
+        std::cerr << "Data ormalized already.\n";
+        return;
+    }
+    if (runInParallel) {
+        NormalizeDataParallel();
+    }
+    else {
+        NormalizeDataSerial();
+    }
+    normalized = true;
 }
 
 void ImageLoader::LoadDataSerial(const std::vector<std::string>& filePaths,
@@ -113,6 +127,12 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
     std::atomic<bool> aborted{false};
 
     auto worker = [&]() {
+      // outputted to file in case people want to debug what is stored in memory.
+      // one scratch buffer per thread; the serial path reuses a single one.
+      std::vector<unsigned char> testImage;
+      if (outputTestImages) {
+          testImage.assign(numFeatures, 0);
+      }
       try {
         for (size_t i = nextIndex.fetch_add(1); i < numImages && !aborted;
              i = nextIndex.fetch_add(1)) {
@@ -138,6 +158,21 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
             // force a resize, straight into this image's row
             ResizeNearest(img, width, height, channels, data[i].data(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE);
             stbi_image_free(img);
+
+            if (outputTestImages) {
+                std::filesystem::path p(path);
+                // always ".jpg": stbi_write_jpg writes JPEG regardless of the source format.
+                std::string newName = p.stem().string() + "-small.jpg";
+                std::filesystem::path newPath = p.parent_path() / newName;
+                // Quality only applies to JPG (1-100)
+                float* currImage = data[i].data();
+                for (unsigned int px = 0; px < numFeatures; px++) {
+                    testImage[px] = (unsigned char)currImage[px];
+                }
+                int quality = 90;
+                stbi_write_jpg(newPath.string().c_str(), TARGET_IMAGE_SIZE, TARGET_IMAGE_SIZE,
+                               EXPECTED_CHANNELS, testImage.data(), quality);
+            }
 
             fileNames[i] = std::move(filename);
             yValues[i] = yValue;
@@ -207,5 +242,76 @@ void ImageLoader::ResizeNearest(unsigned char* src, int oldWidth, int oldHeight,
                     src[(src_y * oldWidth + src_x) * channels + c];
             }
         }
+    }
+}
+
+void ImageLoader::NormalizeDataSerial() {
+    unsigned int numItems = GetNumberOfFeatures();
+    float normalFactor = 1.0f/255.0f;
+    for (size_t i = 0; i < data.size(); i++) {
+        auto& currentImage = data[i];
+        if (currentImage.size() != numItems) {
+            throw std::runtime_error(std::format("Empty image # {}.", i));
+        }
+        for (unsigned int px = 0; px < numItems; px++) {
+            float oldValue = currentImage[px];
+            // consider subtracting around 0 to normalize around -0.5-0.5
+            currentImage[px] = oldValue * normalFactor;
+        }
+    }
+}
+
+void ImageLoader::NormalizeDataParallel() {
+    size_t numImages = data.size();
+    unsigned int numItems = GetNumberOfFeatures();
+    std::mutex errorMutex;
+    std::atomic<size_t> nextIndex{0};
+    std::atomic<bool> aborted{false};
+    std::exception_ptr firstError;
+    float normalFactor = 1.0f/255.0f;
+    
+    auto worker = [&]() {
+        try {
+            for (size_t i = nextIndex.fetch_add(1);
+                 i < numImages && !aborted; i = nextIndex.fetch_add(1)) {
+                auto& currentImage = data[i];
+                if (currentImage.size() != numItems) {
+                    throw std::runtime_error(std::format("Empty image # {}.", i));
+                }
+                for (unsigned int px = 0; px < numItems; px++) {
+                    float oldValue = currentImage[px];
+                    // consider subtracting around 0 to normalize around -0.5-0.5
+                    currentImage[px] = oldValue * normalFactor;
+                }
+            }
+        }
+        catch (...) {
+            // first failure wins; the rest of the pool stops at the loop check.
+            std::lock_guard<std::mutex> lock(errorMutex);
+            if (!firstError) {
+                firstError = std::current_exception();
+            }
+            aborted = true;
+        }
+    };
+    
+    unsigned int numHwThreads = std::thread::hardware_concurrency();
+    size_t maxThreads = numHwThreads == 0 ? 1 : numHwThreads;
+    if (maxThreads > numImages) {
+        maxThreads = numImages;
+    }
+    std::vector<std::thread> workers;
+    for (size_t i = 0; i < maxThreads; i++) {
+        workers.emplace_back(worker);
+    }
+    
+    for (auto& thread : workers) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    
+    if (firstError) {
+        std::rethrow_exception(firstError);
     }
 }
