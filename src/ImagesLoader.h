@@ -25,7 +25,8 @@ public:
     
     void NormalizeData(bool runInParallel = false);
 private:
-    std::vector<std::vector<float>> data;
+    // flattened -- numImages * dimensions_per_image
+    std::vector<float> data;
     std::vector<float> yValues;
     std::vector<std::string> fileNames;
     bool normalized;
@@ -41,6 +42,10 @@ private:
                           bool outputTestImages);
     
     std::vector<std::string> GetFilesInPath(const std::string& path);
+    // creates, if needed, the folder that debug images are written to, and
+    // returns it. It is a sibling of parentFolder and never inside it -- output
+    // written into the scanned folder becomes input on the next run.
+    std::string PrepareDebugFolder(const std::string& parentFolder);
     void ResizeNearest(unsigned char* src, int oldWidth, int oldHeight, int channels,
                   float* dst, int newWidth, int newHeight);
     

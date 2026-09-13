@@ -34,9 +34,9 @@ int main(int argc, char** argv) {
     auto loadStart = std::chrono::steady_clock::now();
 
     ImageLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
-                         trainingArgs.runParallel);
+                         trainingArgs.runParallel, true);
     ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
-                             trainingArgs.runParallel);
+                             trainingArgs.runParallel, true);
     
     std::cout << "Training metadata: \n";
     trainingData.PrintMetadata();
