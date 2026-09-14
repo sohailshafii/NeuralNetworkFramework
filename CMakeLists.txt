@@ -10,7 +10,9 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 set(SOURCE_FILES ${PROJECT_SOURCE_DIR}/src/main.cpp
 	${PROJECT_SOURCE_DIR}/src/ImagesLoader.cpp
-	${PROJECT_SOURCE_DIR}/src/ImagesLoader.h)
+	${PROJECT_SOURCE_DIR}/src/ImagesLoader.h
+	${PROJECT_SOURCE_DIR}/src/Model.cpp
+	${PROJECT_SOURCE_DIR}/src/Model.h)
 
 add_executable(NeuralNetworkFramework ${SOURCE_FILES})
 

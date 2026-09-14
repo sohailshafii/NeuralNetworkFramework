@@ -2,6 +2,7 @@
 #include <string>
 #include <chrono>
 #include "ImagesLoader.h"
+#include "Model.h"
 
 typedef struct TrainingArguments {
     std::string trainingPath = "";
@@ -55,6 +56,9 @@ int main(int argc, char** argv) {
     loadEnd = std::chrono::steady_clock::now();
     loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
     std::cout << "Done normalizing, it took: " << loadMs << "ms.\n";
+    
+    std::vector<unsigned int> numUnitsPerLayer = {20, 7, 5, 1};
+    Model model(trainingData.GetNumberOfFeatures(), numUnitsPerLayer);
 
     return 0;
 }
