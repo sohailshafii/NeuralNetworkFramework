@@ -3,7 +3,11 @@
 
 class Model {
 public:
+    static constexpr unsigned int defaultSeed = 42;
     Model(unsigned int numInputFeatures, const std::vector<unsigned int>& numUnits);
+    
+    void Train(const std::vector<float>& data, bool parallel = false,
+               unsigned int seed = defaultSeed);
     
 private:
     typedef struct LayerInfo {
@@ -11,6 +15,9 @@ private:
         std::vector<float> weights;
         std::vector<float> biases;
     } LayerInfo;
+    unsigned int numInputFeatures;
     std::vector<unsigned int> numUnitsPerLayer;
     std::vector<LayerInfo> layers;
+    
+    void InitializeWeightsAndBiases(unsigned int seed);
 };
