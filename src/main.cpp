@@ -3,6 +3,9 @@
 #include <chrono>
 #include "ImagesLoader.h"
 #include "Model.h"
+#include "ThreadPool.h"
+#include <algorithm>
+#include <thread>
 
 typedef struct TrainingArguments {
     std::string trainingPath = "";
@@ -40,11 +43,13 @@ int main(int argc, char** argv) {
     
     std::cout << "Loading all images...\n";
     auto loadStart = std::chrono::steady_clock::now();
-
+    
+    // one pool for the whole run; the loaders and the model borrow it.
+    auto pool = std::make_shared<ThreadPool>(std::max(1u, std::thread::hardware_concurrency()));
     ImageLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
-                         trainingArgs.runParallel, true);
+                         pool.get(), trainingArgs.runParallel, true);
     ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
-                             trainingArgs.runParallel, true);
+                             pool.get(), trainingArgs.runParallel, true);
     
     std::cout << "Training metadata: \n";
     trainingData.PrintMetadata();
@@ -58,8 +63,8 @@ int main(int argc, char** argv) {
     
     std::cout << "Normalizing...\n";
     loadStart = std::chrono::steady_clock::now();
-    testData.NormalizeData();
-    trainingData.NormalizeData();
+    testData.NormalizeData(pool.get(), trainingArgs.runParallel);
+    trainingData.NormalizeData(pool.get(), trainingArgs.runParallel);
     loadEnd = std::chrono::steady_clock::now();
     loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
     std::cout << "Done normalizing, it took: " << loadMs << "ms.\n";

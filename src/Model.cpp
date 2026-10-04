@@ -5,6 +5,7 @@
 #include <random>
 #include <cmath>
 #include <stdexcept>
+#include "ThreadPool.h"
 
 Model::Model(unsigned int numInputFeatures, const std::vector<unsigned int>& numUnitsPerLayer) {
     if (numUnitsPerLayer.empty()) {
@@ -23,16 +24,15 @@ Model::Model(unsigned int numInputFeatures, const std::vector<unsigned int>& num
         // output layer.
         layers[i].weights.resize(numUnitsPerLayer[i] * numUnitsPerLayer[i - 1]);
         layers[i].biases.resize(numUnitsPerLayer[i]);
-    }
-    
-    pool = std::make_shared<ThreadPool>((std::max(1u, std::thread::hardware_concurrency())));
+    }    
 }
 
-void Model::Train(const std::vector<float>& data, bool parallel, unsigned int seed) {
-    InitializeWeightsAndBiases(seed, parallel);
+void Model::Train(const std::vector<float>& data,
+                  ThreadPool* threadPool, bool parallel, unsigned int seed) {
+    InitializeWeightsAndBiases(threadPool, seed, parallel);
 }
 
-void Model::InitializeWeightsAndBiases(unsigned int seed, bool parallel) {
+void Model::InitializeWeightsAndBiases(ThreadPool* threadPool, unsigned int seed, bool parallel) {
     size_t numLayers = numUnitsPerLayer.size();
     
     for (size_t i = 0; i < numLayers; i++) {
@@ -75,7 +75,7 @@ void Model::InitializeWeightsAndBiases(unsigned int seed, bool parallel) {
         };
         
         if (parallel) {
-            pool->ParallelFor(numChunks, fillChunks);
+            threadPool->ParallelFor(numChunks, fillChunks);
         }
         else {
             fillChunks(0, numChunks);

@@ -1,14 +1,17 @@
 #pragma once
 #include <vector>
 #include <memory>
-#include <ThreadPool.h>
+
+class ThreadPool;
 
 class Model {
 public:
     static constexpr unsigned int defaultSeed = 42;
     Model(unsigned int numInputFeatures, const std::vector<unsigned int>& numUnits);
     
-    void Train(const std::vector<float>& data, bool parallel = false,
+    void Train(const std::vector<float>& data,
+               ThreadPool* threadPool,
+               bool parallel = false,
                unsigned int seed = defaultSeed);
     
 private:
@@ -20,7 +23,6 @@ private:
     unsigned int numInputFeatures;
     std::vector<unsigned int> numUnitsPerLayer;
     std::vector<LayerInfo> layers;
-    std::shared_ptr<ThreadPool> pool;
     
-    void InitializeWeightsAndBiases(unsigned int seed, bool parallel);
+    void InitializeWeightsAndBiases(ThreadPool* threadPool, unsigned int seed, bool parallel);
 };

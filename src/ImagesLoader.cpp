@@ -28,14 +28,14 @@
 
 ImageLoader::ImageLoader(const std::string& positiveLabel,
                          const std::string& parentFolder,
+                         ThreadPool* threadPool,
                          bool runInParallel,
                          bool outputTestImages) {
-    pool = std::make_shared<ThreadPool>((std::max(1u, std::thread::hardware_concurrency())));
     std::vector<std::string> filePaths = GetFilesInPath(parentFolder);
     std::cout << "Found " << filePaths.size() << " images in path " << parentFolder << ".\n";
     normalized = false;
     if (runInParallel) {
-        LoadDataParallel(filePaths, positiveLabel, parentFolder, outputTestImages);
+        LoadDataParallel(filePaths, positiveLabel, parentFolder, outputTestImages, threadPool);
     }
     else {
         LoadDataSerial(filePaths, positiveLabel, parentFolder, outputTestImages);
@@ -48,13 +48,13 @@ void ImageLoader::PrintMetadata() {
         << ", num channels: " << EXPECTED_CHANNELS << ", number of features: " << GetNumberOfFeatures() << "\n";
 }
 
-void ImageLoader::NormalizeData(bool runInParallel) {
+void ImageLoader::NormalizeData(ThreadPool* threadPool, bool runInParallel) {
     if (normalized) {
         std::cerr << "Data ormalized already.\n";
         return;
     }
     if (runInParallel) {
-        NormalizeDataParallel();
+        NormalizeDataParallel(threadPool);
     }
     else {
         NormalizeDataSerial();
@@ -117,7 +117,8 @@ void ImageLoader::LoadDataSerial(const std::vector<std::string>& filePaths,
 void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
                       const std::string& positiveLabel,
                       const std::string& parentFolder,
-                      bool outputTestImages) {
+                      bool outputTestImages,
+                      ThreadPool* threadPool) {
     unsigned int numFeatures = GetNumberOfFeatures();
     size_t numImages = filePaths.size();
     std::atomic<bool> aborted{false};
@@ -199,7 +200,7 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
           aborted = true;
       }
     };
-    pool->ParallelFor(numImages, worker);
+    threadPool->ParallelFor(numImages, worker);
     
     // if something was thrown earlier in worker, rethrow it
     if (firstError) {
@@ -285,7 +286,7 @@ void ImageLoader::NormalizeDataSerial() {
     }
 }
 
-void ImageLoader::NormalizeDataParallel() {
+void ImageLoader::NormalizeDataParallel(ThreadPool* threadPool) {
     size_t numExpected = fileNames.size() * GetNumberOfFeatures();
     if (data.size() != numExpected) {
         throw std::runtime_error(std::format("Num images # {} vs expected {}.", data.size(),
@@ -297,50 +298,18 @@ void ImageLoader::NormalizeDataParallel() {
     }
 
     float normalFactor = 1.0f/255.0f;
-
-    // image boundaries do not matter here -- this is one flat span of floats and
-    // every element costs the same, so a static split balances perfectly and
-    // needs no atomic counter at all. Each thread just gets a [begin, end) range.
-    auto worker = [&](size_t begin, size_t end) {
-        float* values = data.data();
-        for (size_t i = begin; i < end; i++) {
-            // consider subtracting around 0 to normalize around -0.5-0.5
-            values[i] = values[i] * normalFactor;
-        }
-    };
-
     // chunk in whole cache lines so that two threads never write to the same
     // 64-byte line at a range boundary.
     const size_t floatsPerCacheLine = 64 / sizeof(float);
     size_t numLines = (numExpected + floatsPerCacheLine - 1) / floatsPerCacheLine;
-
-    unsigned int numHwThreads = std::thread::hardware_concurrency();
-    size_t maxThreads = numHwThreads == 0 ? 1 : numHwThreads;
-    if (maxThreads > numLines) {
-        maxThreads = numLines;
-    }
-
-    // the first (numLines % maxThreads) threads take one extra line, so the
-    // ranges differ by at most one line instead of piling the remainder on one.
-    size_t linesPerThread = numLines / maxThreads;
-    size_t extraLines = numLines % maxThreads;
-
-    std::vector<std::thread> workers;
-    size_t begin = 0;
-    for (size_t i = 0; i < maxThreads; i++) {
-        size_t numThreadLines = linesPerThread + (i < extraLines ? 1 : 0);
-        size_t end = begin + numThreadLines * floatsPerCacheLine;
-        // the final chunk is short whenever numExpected is not a whole number of lines.
-        if (end > numExpected) {
-            end = numExpected;
+    auto worker = [&](size_t lineBegin, size_t lineEnd) {
+        float* values = data.data();
+        size_t begin = lineBegin * floatsPerCacheLine;
+        size_t end = std::min(lineEnd * floatsPerCacheLine, numExpected);
+        for (size_t i = begin; i < end; i++) {
+            // consider subtracting around 0
+            values[i] = values[i] * normalFactor;
         }
-        workers.emplace_back(worker, begin, end);
-        begin = end;
-    }
-
-    for (auto& thread : workers) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
+    };
+    threadPool->ParallelFor(numLines, worker);
 }
