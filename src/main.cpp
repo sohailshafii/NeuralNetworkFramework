@@ -115,7 +115,7 @@ unsigned int parseArguments(int argc, char** argv, TrainingArguments& trainingAr
                 std::cerr << "No iteration value given.\n";
                 return 1;
             }
-            trainingArgs.positiveLabel = static_cast<unsigned int>(std::stoul(followingArgument));
+            trainingArgs.numIterations = static_cast<unsigned int>(std::stoul(followingArgument));
         }
         else if (!strcmp(argv[i], "-learningRate")) {
             if (followingArgument == nullptr) {
