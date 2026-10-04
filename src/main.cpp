@@ -31,6 +31,13 @@ int main(int argc, char** argv) {
         return 1;
     }
     
+    if (trainingArgs.runParallel) {
+        std::cout << "Running in parallel mode.\n";
+    }
+    else {
+        std::cout << "Running in serial mode.\n";
+    }
+    
     std::cout << "Loading all images...\n";
     auto loadStart = std::chrono::steady_clock::now();
 

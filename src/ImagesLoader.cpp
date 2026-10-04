@@ -21,6 +21,7 @@
 #include <cassert>
 #include <format>
 #include <stdexcept>
+#include "ThreadPool.h"
 
 #define TARGET_IMAGE_SIZE 64 // down from 256
 #define EXPECTED_CHANNELS 3
@@ -29,6 +30,7 @@ ImageLoader::ImageLoader(const std::string& positiveLabel,
                          const std::string& parentFolder,
                          bool runInParallel,
                          bool outputTestImages) {
+    pool = std::make_shared<ThreadPool>((std::max(1u, std::thread::hardware_concurrency())));
     std::vector<std::string> filePaths = GetFilesInPath(parentFolder);
     std::cout << "Found " << filePaths.size() << " images in path " << parentFolder << ".\n";
     normalized = false;
@@ -118,29 +120,26 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
                       bool outputTestImages) {
     unsigned int numFeatures = GetNumberOfFeatures();
     size_t numImages = filePaths.size();
-
+    std::atomic<bool> aborted{false};
     // created once here rather than in a worker, so the threads only ever write
     // files into a folder that already exists.
     std::string debugFolder;
     if (outputTestImages) {
         debugFolder = PrepareDebugFolder(parentFolder);
     }
-
+    
     // every worker writes to its own slot, so no lock is needed on the results
     // and the row order matches filePaths -- same as LoadDataSerial.
     data.resize(numImages * numFeatures);
     yValues.assign(numImages, 0.0f);
     fileNames.assign(numImages, std::string());
-
-    std::vector<std::thread> workers;
-    std::atomic<size_t> nextIndex{0};
+    
     // an exception thrown in a worker cannot escape its thread -- that calls
     // std::terminate. Stash the first one and rethrow it after the join.
     std::mutex errorMutex;
     std::exception_ptr firstError;
-    std::atomic<bool> aborted{false};
-
-    auto worker = [&]() {
+    
+    auto worker = [&](size_t begin, size_t end) {
       // outputted to file in case people want to debug what is stored in memory.
       // one scratch buffer per thread; the serial path reuses a single one.
       std::vector<unsigned char> testImage;
@@ -148,8 +147,7 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
           testImage.assign(numFeatures, 0);
       }
       try {
-        for (size_t i = nextIndex.fetch_add(1); i < numImages && !aborted;
-             i = nextIndex.fetch_add(1)) {
+        for (size_t i = begin; i < end && !aborted; i++) {
             const std::string& path = filePaths[i];
 
             int width, height, channels;
@@ -201,25 +199,9 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
           aborted = true;
       }
     };
-
-    // hardware_concurrency() is allowed to return 0, and there is no point
-    // spawning more threads than there are images.
-    unsigned int hwThreads = std::thread::hardware_concurrency();
-    size_t maxThreads = hwThreads == 0 ? 1 : hwThreads;
-    if (maxThreads > numImages) {
-        maxThreads = numImages;
-    }
-
-    for (size_t i = 0; i < maxThreads; i++) {
-        workers.emplace_back(worker);
-    }
-
-    for (auto& thread : workers) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-
+    pool->ParallelFor(numImages, worker);
+    
+    // if something was thrown earlier in worker, rethrow it
     if (firstError) {
         std::rethrow_exception(firstError);
     }

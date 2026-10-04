@@ -6,6 +6,8 @@
 #define TARGET_IMAGE_SIZE 64 // down from 256
 #define EXPECTED_CHANNELS 3
 
+class ThreadPool;
+
 class ImageLoader {
 public:
     // positive label indicates if an image is a positive result
@@ -30,6 +32,7 @@ private:
     std::vector<float> yValues;
     std::vector<std::string> fileNames;
     bool normalized;
+    std::shared_ptr<ThreadPool> pool;
     
     void LoadDataSerial(const std::vector<std::string>& filePaths,
                         const std::string& positiveLabel,
