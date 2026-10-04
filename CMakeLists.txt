@@ -33,3 +33,33 @@ if(APPLE)
     # 3. SAFETY SWITCH: Stops CMake from crashing when it validates your cross-compilation compiler
     #set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 endif()
+
+# ---- tests ----
+# gtest is fetched at configure time; the first configure needs network access.
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.17.0
+)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+
+add_executable(NeuralNetworkTests
+    ${PROJECT_SOURCE_DIR}/tests/ImageLoaderTests.cpp
+    ${PROJECT_SOURCE_DIR}/tests/ModelTests.cpp
+    ${PROJECT_SOURCE_DIR}/src/ImagesLoader.cpp
+    ${PROJECT_SOURCE_DIR}/src/Model.cpp
+    ${PROJECT_SOURCE_DIR}/src/ThreadPool.cpp)
+
+target_include_directories(NeuralNetworkTests
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/src/")
+
+target_link_libraries(NeuralNetworkTests PRIVATE GTest::gtest_main)
+
+include(GoogleTest)
+# PRE_TEST enumerates tests when ctest runs, not as an Xcode post-build script,
+# which fails under Xcode's script sandbox.
+gtest_discover_tests(NeuralNetworkTests DISCOVERY_MODE PRE_TEST)

@@ -26,6 +26,10 @@ public:
     
     void PrintMetadata();
     
+    const std::vector<float>& GetData() const { return data; }
+    const std::vector<float>& GetYValues() const { return yValues; }
+    const std::vector<std::string>& GetFileNames() const { return fileNames; }
+    
     void NormalizeData(ThreadPool* threadPool, bool runInParallel = false);
 private:
     // flattened -- numImages * dimensions_per_image

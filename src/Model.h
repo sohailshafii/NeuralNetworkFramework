@@ -14,12 +14,15 @@ public:
                bool parallel = false,
                unsigned int seed = defaultSeed);
     
-private:
     typedef struct LayerInfo {
         // flattened weights matrix and biases vector
         std::vector<float> weights;
         std::vector<float> biases;
     } LayerInfo;
+    
+    const std::vector<LayerInfo>& GetLayers() const { return layers; }
+    
+private:
     unsigned int numInputFeatures;
     std::vector<unsigned int> numUnitsPerLayer;
     std::vector<LayerInfo> layers;
