@@ -28,11 +28,11 @@ Model::Model(unsigned int numInputFeatures, const std::vector<unsigned int>& num
 }
 
 void Model::Train(const std::vector<float>& data,
-                  ThreadPool* threadPool, bool parallel, unsigned int seed) {
+                  ThreadPool& threadPool, bool parallel, unsigned int seed) {
     InitializeWeightsAndBiases(threadPool, seed, parallel);
 }
 
-void Model::InitializeWeightsAndBiases(ThreadPool* threadPool, unsigned int seed, bool parallel) {
+void Model::InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel) {
     size_t numLayers = numUnitsPerLayer.size();
     
     for (size_t i = 0; i < numLayers; i++) {
@@ -75,7 +75,7 @@ void Model::InitializeWeightsAndBiases(ThreadPool* threadPool, unsigned int seed
         };
         
         if (parallel) {
-            threadPool->ParallelFor(numChunks, fillChunks);
+            threadPool.ParallelFor(numChunks, fillChunks);
         }
         else {
             fillChunks(0, numChunks);

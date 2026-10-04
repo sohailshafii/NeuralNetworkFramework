@@ -1,6 +1,5 @@
 #pragma once
 #include <vector>
-#include <memory>
 
 class ThreadPool;
 
@@ -10,7 +9,7 @@ public:
     Model(unsigned int numInputFeatures, const std::vector<unsigned int>& numUnits);
     
     void Train(const std::vector<float>& data,
-               ThreadPool* threadPool,
+               ThreadPool& threadPool,
                bool parallel = false,
                unsigned int seed = defaultSeed);
     
@@ -27,5 +26,5 @@ private:
     std::vector<unsigned int> numUnitsPerLayer;
     std::vector<LayerInfo> layers;
     
-    void InitializeWeightsAndBiases(ThreadPool* threadPool, unsigned int seed, bool parallel);
+    void InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel);
 };

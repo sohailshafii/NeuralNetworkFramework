@@ -55,8 +55,8 @@ protected:
 
 TEST_F(ImageLoaderTest, ParallelLoadMatchesSerial) {
     ThreadPool pool(4);
-    ImageLoader serial(positiveLabel, folder.string(), &pool, false);
-    ImageLoader parallel(positiveLabel, folder.string(), &pool, true);
+    ImageLoader serial(positiveLabel, folder.string(), pool, false);
+    ImageLoader parallel(positiveLabel, folder.string(), pool, true);
 
     ASSERT_EQ(serial.GetFileNames().size(), 6u);
     EXPECT_EQ(serial.GetFileNames(), parallel.GetFileNames());
@@ -66,12 +66,12 @@ TEST_F(ImageLoaderTest, ParallelLoadMatchesSerial) {
 
 TEST_F(ImageLoaderTest, ParallelNormalizeMatchesSerial) {
     ThreadPool pool(4);
-    ImageLoader serial(positiveLabel, folder.string(), &pool, false);
-    ImageLoader parallel(positiveLabel, folder.string(), &pool, false);
+    ImageLoader serial(positiveLabel, folder.string(), pool, false);
+    ImageLoader parallel(positiveLabel, folder.string(), pool, false);
     ASSERT_EQ(serial.GetData(), parallel.GetData());
 
-    serial.NormalizeData(&pool, false);
-    parallel.NormalizeData(&pool, true);
+    serial.NormalizeData(pool, false);
+    parallel.NormalizeData(pool, true);
 
     EXPECT_EQ(serial.GetData(), parallel.GetData());
     // sanity: normalization actually changed the values into [0, 1]

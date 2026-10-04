@@ -28,7 +28,7 @@
 
 ImageLoader::ImageLoader(const std::string& positiveLabel,
                          const std::string& parentFolder,
-                         ThreadPool* threadPool,
+                         ThreadPool& threadPool,
                          bool runInParallel,
                          bool outputTestImages) {
     std::vector<std::string> filePaths = GetFilesInPath(parentFolder);
@@ -48,7 +48,7 @@ void ImageLoader::PrintMetadata() {
         << ", num channels: " << EXPECTED_CHANNELS << ", number of features: " << GetNumberOfFeatures() << "\n";
 }
 
-void ImageLoader::NormalizeData(ThreadPool* threadPool, bool runInParallel) {
+void ImageLoader::NormalizeData(ThreadPool& threadPool, bool runInParallel) {
     if (normalized) {
         std::cerr << "Data ormalized already.\n";
         return;
@@ -118,7 +118,7 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
                       const std::string& positiveLabel,
                       const std::string& parentFolder,
                       bool outputTestImages,
-                      ThreadPool* threadPool) {
+                      ThreadPool& threadPool) {
     unsigned int numFeatures = GetNumberOfFeatures();
     size_t numImages = filePaths.size();
     std::atomic<bool> aborted{false};
@@ -200,7 +200,7 @@ void ImageLoader::LoadDataParallel(const std::vector<std::string>& filePaths,
           aborted = true;
       }
     };
-    threadPool->ParallelFor(numImages, worker);
+    threadPool.ParallelFor(numImages, worker);
     
     // if something was thrown earlier in worker, rethrow it
     if (firstError) {
@@ -286,7 +286,7 @@ void ImageLoader::NormalizeDataSerial() {
     }
 }
 
-void ImageLoader::NormalizeDataParallel(ThreadPool* threadPool) {
+void ImageLoader::NormalizeDataParallel(ThreadPool& threadPool) {
     size_t numExpected = fileNames.size() * GetNumberOfFeatures();
     if (data.size() != numExpected) {
         throw std::runtime_error(std::format("Num images # {} vs expected {}.", data.size(),
@@ -311,5 +311,5 @@ void ImageLoader::NormalizeDataParallel(ThreadPool* threadPool) {
             values[i] = values[i] * normalFactor;
         }
     };
-    threadPool->ParallelFor(numLines, worker);
+    threadPool.ParallelFor(numLines, worker);
 }

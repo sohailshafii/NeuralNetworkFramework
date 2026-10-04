@@ -16,8 +16,8 @@ TEST(ModelTest, ParallelInitMatchesSerial) {
 
     Model serial(numInputFeatures, numUnitsPerLayer);
     Model parallel(numInputFeatures, numUnitsPerLayer);
-    serial.Train(noData, &pool, false, 42);
-    parallel.Train(noData, &pool, true, 42);
+    serial.Train(noData, pool, false, 42);
+    parallel.Train(noData, pool, true, 42);
 
     const auto& serialLayers = serial.GetLayers();
     const auto& parallelLayers = parallel.GetLayers();

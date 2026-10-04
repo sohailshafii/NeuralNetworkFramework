@@ -15,7 +15,7 @@ public:
     // a probably of 1, otherwise it is a 0
     ImageLoader(const std::string& positiveLabel,
                 const std::string& parentFolder,
-                ThreadPool* threadPool,
+                ThreadPool& threadPool,
                 bool runInParallel = false,
                 bool outputTestImages = false);
     
@@ -30,7 +30,7 @@ public:
     const std::vector<float>& GetYValues() const { return yValues; }
     const std::vector<std::string>& GetFileNames() const { return fileNames; }
     
-    void NormalizeData(ThreadPool* threadPool, bool runInParallel = false);
+    void NormalizeData(ThreadPool& threadPool, bool runInParallel = false);
 private:
     // flattened -- numImages * dimensions_per_image
     std::vector<float> data;
@@ -47,7 +47,7 @@ private:
                           const std::string& positiveLabel,
                           const std::string& parentFolder,
                           bool outputTestImages,
-                          ThreadPool* threadPool);
+                          ThreadPool& threadPool);
     
     std::vector<std::string> GetFilesInPath(const std::string& path);
     // creates, if needed, the folder that debug images are written to, and
@@ -58,5 +58,5 @@ private:
                   float* dst, int newWidth, int newHeight);
     
     void NormalizeDataSerial();
-    void NormalizeDataParallel(ThreadPool* threadPool);
+    void NormalizeDataParallel(ThreadPool& threadPool);
 };

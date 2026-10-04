@@ -45,11 +45,11 @@ int main(int argc, char** argv) {
     auto loadStart = std::chrono::steady_clock::now();
     
     // one pool for the whole run; the loaders and the model borrow it.
-    auto pool = std::make_shared<ThreadPool>(std::max(1u, std::thread::hardware_concurrency()));
+    ThreadPool pool(std::max(1u, std::thread::hardware_concurrency()));
     ImageLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
-                         pool.get(), trainingArgs.runParallel, true);
+                         pool, trainingArgs.runParallel, true);
     ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
-                             pool.get(), trainingArgs.runParallel, true);
+                             pool, trainingArgs.runParallel, true);
     
     std::cout << "Training metadata: \n";
     trainingData.PrintMetadata();
@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
     
     std::cout << "Normalizing...\n";
     loadStart = std::chrono::steady_clock::now();
-    testData.NormalizeData(pool.get(), trainingArgs.runParallel);
-    trainingData.NormalizeData(pool.get(), trainingArgs.runParallel);
+    testData.NormalizeData(pool, trainingArgs.runParallel);
+    trainingData.NormalizeData(pool, trainingArgs.runParallel);
     loadEnd = std::chrono::steady_clock::now();
     loadMs = std::chrono::duration_cast<std::chrono::milliseconds>(loadEnd - loadStart).count();
     std::cout << "Done normalizing, it took: " << loadMs << "ms.\n";
