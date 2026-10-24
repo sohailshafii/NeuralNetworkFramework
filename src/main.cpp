@@ -46,9 +46,9 @@ int main(int argc, char** argv) {
     
     // one pool for the whole run; the loaders and the model borrow it.
     ThreadPool pool(std::max(1u, std::thread::hardware_concurrency()));
-    ImageLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
+    ImagesLoader testData(trainingArgs.positiveLabel, trainingArgs.testPath,
                          pool, trainingArgs.runParallel, true);
-    ImageLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
+    ImagesLoader trainingData(trainingArgs.positiveLabel, trainingArgs.trainingPath,
                              pool, trainingArgs.runParallel, true);
     
     std::cout << "Training metadata: \n";
@@ -70,7 +70,26 @@ int main(int argc, char** argv) {
     std::cout << "Done normalizing, it took: " << loadMs << "ms.\n";
     
     std::vector<unsigned int> numUnitsPerLayer = {20, 7, 5, 1};
-    Model model(trainingData.GetNumberOfFeatures(), numUnitsPerLayer);
+    Model model(trainingData.GetNumberOfFeaturesPerImage(), numUnitsPerLayer);
+    Model::ModelParams modelParams {
+       .learningRate = 0.0007f,
+       .miniBatchSize = 64,
+       .beta = 0.9f,
+       .beta1 = 0.9f,
+       .beta2 = 0.99f,
+       .epsilon = 1e-8,
+       .numEpochs = 30,
+           
+       .printCost = true,
+       .decay = nullptr,
+       .decayRate = 1.0f,
+       .timeInterval = 100,
+           
+       .optimizer = Model::Optimizer::GradientDescent
+    };
+    model.Train(trainingData, pool,
+                modelParams,
+                trainingArgs.runParallel);
 
     return 0;
 }

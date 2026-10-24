@@ -8,20 +8,25 @@
 
 class ThreadPool;
 
-class ImageLoader {
+class ImagesLoader {
 public:
     // positive label indicates if an image is a positive result
     // this is used for supervised learning. positive relates to
     // a probably of 1, otherwise it is a 0
-    ImageLoader(const std::string& positiveLabel,
+    ImagesLoader(const std::string& positiveLabel,
                 const std::string& parentFolder,
                 ThreadPool& threadPool,
                 bool runInParallel = false,
                 bool outputTestImages = false);
     
-    unsigned int GetNumberOfFeatures()
+    unsigned int GetNumberOfFeaturesPerImage() const
     {
         return TARGET_IMAGE_SIZE*TARGET_IMAGE_SIZE*EXPECTED_CHANNELS;
+    }
+    
+    unsigned long GetNumImages() const
+    {
+        return data.size() / GetNumberOfFeaturesPerImage();
     }
     
     void PrintMetadata();

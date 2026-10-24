@@ -4,8 +4,11 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
+#include <cassert>
+#include <numeric>
 #include <stdexcept>
 #include "ThreadPool.h"
+#include "ImagesLoader.h"
 
 Model::Model(unsigned int numInputFeatures, const std::vector<unsigned int>& numUnitsPerLayer) {
     if (numUnitsPerLayer.empty()) {
@@ -27,9 +30,122 @@ Model::Model(unsigned int numInputFeatures, const std::vector<unsigned int>& num
     }    
 }
 
-void Model::Train(const std::vector<float>& data,
-                  ThreadPool& threadPool, bool parallel, unsigned int seed) {
+void Model::Train(const ImagesLoader& imagesLoader,
+                  ThreadPool& threadPool,
+                  const ModelParams& modelParams,
+                  bool parallel, unsigned int seed) {
     InitializeWeightsAndBiases(threadPool, seed, parallel);
+    
+    ModelParams currentParams = modelParams;
+    std::vector<float> costs;
+    // adam update counter
+    unsigned int t = 0;
+    // TODO: seed for minibatches
+    // number of training examples -- get from images loader
+    unsigned long m = imagesLoader.GetNumImages();
+    
+    if (modelParams.optimizer == Optimizer::GradientDescent) {
+        // TODO implement if required
+    }
+    else if (modelParams.optimizer == Optimizer::Momentum) {
+        // TODO implement momentum
+    }
+    else if (modelParams.optimizer == Optimizer::Adam) {
+        // TODO: implement adam
+    }
+    
+    std::vector<float> yValues;
+    
+    unsigned int currentSeed = seed;
+    std::vector<MiniBatch> miniBatches;
+    for (unsigned int currEpoch = 0; currEpoch < modelParams.numEpochs; currEpoch++) {
+        // Define the random minibatches. We increment the seed to distinctly reshuffle
+        // the data set after each epoch.
+        currentSeed++;
+        
+        CreateRandomMiniBatches(imagesLoader, miniBatches, modelParams.miniBatchSize,
+                                currentSeed);
+        
+        // TODO: loop per mini batch
+        
+        // TODO cost avg
+        
+        // TODO decay
+        
+        // TODO print
+    }
+    
+    // TODO: set params and final cost
+}
+
+void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
+                                    std::vector<MiniBatch>& miniBatches,
+                                    unsigned int miniBatchSize,
+                                    unsigned int seed) {
+    miniBatches.clear();
+    
+    // TODO: size_t or unsigned long, clean up as this is confusing code
+    // TODO: std::copy_n?
+    unsigned long m = imagesLoader.GetNumImages();
+    std::vector<unsigned int> samplesPerm(m);
+    // for from 0 to samples.end()-1
+    std::iota(samplesPerm.begin(), samplesPerm.end(), 0u);
+    // shuffle them using a seed
+    std::mt19937 randGen(seed);
+    std::shuffle(samplesPerm.begin(), samplesPerm.end(), randGen);
+    
+    // create re-usable chunks to store features, and also output chunks.
+    unsigned int numFeatures = imagesLoader.GetNumberOfFeaturesPerImage();
+    std::vector<float> featureChunk(numFeatures * miniBatchSize);
+    std::vector<float> outputChunk(miniBatchSize);
+    // a portion of the data will be complete, while remaining will need to set up manually
+    unsigned int numCompleteMiniBatches = floor(m / miniBatchSize);
+    auto originalYValues = imagesLoader.GetYValues();
+    auto originalXValues = imagesLoader.GetData();
+    
+    // TODO parallel
+    std::vector<float> xValues(originalXValues.size());
+    std::vector<float> yValues(originalYValues.size());
+    // now we need to shuffle the data
+    for (unsigned int i = 0; i < m; i++) {
+        unsigned int permIndex = samplesPerm[i];
+        memcpy(xValues.data() + (i * numFeatures),
+               originalXValues.data() + (permIndex * numFeatures),
+               numFeatures * sizeof(float));
+        yValues[i] = originalYValues[permIndex];
+    }
+    
+    assert(xValues.size() >= imagesLoader.GetNumberOfFeaturesPerImage() * numCompleteMiniBatches);
+    assert(yValues.size() >= numCompleteMiniBatches);
+
+    // we need the size of batch size in bytes for features, and this requires knowing the number of
+    // features per image * mini-batch-size * sizeof_float
+    unsigned int featBatchSizeBytes = imagesLoader.GetNumberOfFeaturesPerImage() * miniBatchSize * sizeof(float);
+    unsigned int outputBatchSizeBytes = miniBatchSize * sizeof(float);
+    
+    for(unsigned int i = 0; i < numCompleteMiniBatches; i++) {
+        unsigned int sampleIndex = i * miniBatchSize;
+        unsigned int currFeatureOffset = sampleIndex * imagesLoader.GetNumberOfFeaturesPerImage();
+        
+        memcpy(featureChunk.data(), xValues.data() + currFeatureOffset, featBatchSizeBytes);
+        memcpy(outputChunk.data(), yValues.data() + sampleIndex, outputBatchSizeBytes);
+
+        miniBatches.emplace_back(MiniBatch{featureChunk, outputChunk});
+    }
+    
+    // handling case where last minibatch is incomplete
+    if (m % miniBatchSize != 0) {
+        
+        unsigned int lastFeatureOffset = numCompleteMiniBatches * imagesLoader.GetNumberOfFeaturesPerImage() * miniBatchSize;
+        unsigned int lastOutputOffset = numCompleteMiniBatches * miniBatchSize;
+        unsigned long remainingSize = m - numCompleteMiniBatches * miniBatchSize;
+        std::vector<float> lastFeatChunk(imagesLoader.GetNumberOfFeaturesPerImage() * remainingSize);
+        std::vector<float> lastOutputChunk(remainingSize);
+        memcpy(lastFeatChunk.data(), xValues.data() + lastFeatureOffset,
+               imagesLoader.GetNumberOfFeaturesPerImage() * remainingSize * sizeof(float));
+        memcpy(lastOutputChunk.data(), yValues.data() + lastOutputOffset,
+               remainingSize * sizeof(float));
+    }
 }
 
 void Model::InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel) {
