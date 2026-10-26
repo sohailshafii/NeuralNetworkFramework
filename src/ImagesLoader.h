@@ -24,7 +24,7 @@ public:
         return TARGET_IMAGE_SIZE*TARGET_IMAGE_SIZE*EXPECTED_CHANNELS;
     }
     
-    unsigned long GetNumImages() const
+    size_t GetNumImages() const
     {
         return data.size() / GetNumberOfFeaturesPerImage();
     }

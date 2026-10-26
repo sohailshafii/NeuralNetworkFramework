@@ -84,10 +84,8 @@ void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
                                     unsigned int seed) {
     miniBatches.clear();
     
-    // TODO: size_t or unsigned long, clean up as this is confusing code
-    // TODO: std::copy_n?
-    unsigned long m = imagesLoader.GetNumImages();
-    std::vector<unsigned int> samplesPerm(m);
+    size_t m = imagesLoader.GetNumImages();
+    std::vector<size_t> samplesPerm(m);
     // for from 0 to samples.end()-1
     std::iota(samplesPerm.begin(), samplesPerm.end(), 0u);
     // shuffle them using a seed
@@ -99,33 +97,33 @@ void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
     std::vector<float> featureChunk(numFeatures * miniBatchSize);
     std::vector<float> outputChunk(miniBatchSize);
     // a portion of the data will be complete, while remaining will need to set up manually
-    unsigned int numCompleteMiniBatches = floor(m / miniBatchSize);
+    size_t numCompleteMiniBatches = floor(m / miniBatchSize);
     auto originalYValues = imagesLoader.GetYValues();
     auto originalXValues = imagesLoader.GetData();
     
     // TODO parallel
     std::vector<float> xValues(originalXValues.size());
     std::vector<float> yValues(originalYValues.size());
-    // now we need to shuffle the data
-    for (unsigned int i = 0; i < m; i++) {
-        unsigned int permIndex = samplesPerm[i];
+    // now we need to shuffle the data based on the perm indices.
+    for (size_t i = 0; i < m; i++) {
+        size_t permIndex = samplesPerm[i];
         memcpy(xValues.data() + (i * numFeatures),
                originalXValues.data() + (permIndex * numFeatures),
                numFeatures * sizeof(float));
         yValues[i] = originalYValues[permIndex];
     }
     
-    assert(xValues.size() >= imagesLoader.GetNumberOfFeaturesPerImage() * numCompleteMiniBatches);
+    assert(xValues.size() >= numFeatures * numCompleteMiniBatches);
     assert(yValues.size() >= numCompleteMiniBatches);
 
     // we need the size of batch size in bytes for features, and this requires knowing the number of
     // features per image * mini-batch-size * sizeof_float
-    unsigned int featBatchSizeBytes = imagesLoader.GetNumberOfFeaturesPerImage() * miniBatchSize * sizeof(float);
+    unsigned int featBatchSizeBytes = numFeatures * miniBatchSize * sizeof(float);
     unsigned int outputBatchSizeBytes = miniBatchSize * sizeof(float);
     
     for(unsigned int i = 0; i < numCompleteMiniBatches; i++) {
         unsigned int sampleIndex = i * miniBatchSize;
-        unsigned int currFeatureOffset = sampleIndex * imagesLoader.GetNumberOfFeaturesPerImage();
+        unsigned int currFeatureOffset = sampleIndex * numFeatures;
         
         memcpy(featureChunk.data(), xValues.data() + currFeatureOffset, featBatchSizeBytes);
         memcpy(outputChunk.data(), yValues.data() + sampleIndex, outputBatchSizeBytes);
@@ -135,16 +133,15 @@ void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
     
     // handling case where last minibatch is incomplete
     if (m % miniBatchSize != 0) {
-        
-        unsigned int lastFeatureOffset = numCompleteMiniBatches * imagesLoader.GetNumberOfFeaturesPerImage() * miniBatchSize;
-        unsigned int lastOutputOffset = numCompleteMiniBatches * miniBatchSize;
-        unsigned long remainingSize = m - numCompleteMiniBatches * miniBatchSize;
-        std::vector<float> lastFeatChunk(imagesLoader.GetNumberOfFeaturesPerImage() * remainingSize);
-        std::vector<float> lastOutputChunk(remainingSize);
+        size_t lastFeatureOffset = numCompleteMiniBatches * numFeatures * miniBatchSize;
+        size_t lastOutputOffset = numCompleteMiniBatches * miniBatchSize;
+        size_t numRemainingSamples = m - lastOutputOffset;
+        std::vector<float> lastFeatChunk(numFeatures * numRemainingSamples);
+        std::vector<float> lastOutputChunk(numRemainingSamples);
         memcpy(lastFeatChunk.data(), xValues.data() + lastFeatureOffset,
-               imagesLoader.GetNumberOfFeaturesPerImage() * remainingSize * sizeof(float));
+               numFeatures * numRemainingSamples * sizeof(float));
         memcpy(lastOutputChunk.data(), yValues.data() + lastOutputOffset,
-               remainingSize * sizeof(float));
+               numRemainingSamples * sizeof(float));
     }
 }
 
