@@ -87,9 +87,13 @@ int main(int argc, char** argv) {
            
        .optimizer = Model::Optimizer::GradientDescent
     };
+    auto trainStart = std::chrono::steady_clock::now();
     model.Train(trainingData, pool,
                 modelParams,
                 trainingArgs.runParallel);
+    auto trainEnd = std::chrono::steady_clock::now();
+    auto trainDur = std::chrono::duration_cast<std::chrono::milliseconds>(trainEnd - trainStart).count();
+    std::cout << "Done training, it took: " << trainDur << "ms.\n";
 
     return 0;
 }

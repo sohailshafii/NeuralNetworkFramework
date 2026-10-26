@@ -58,7 +58,9 @@ private:
     
     void CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
                                  std::vector<MiniBatch>& miniBatches,
+                                 ThreadPool& threadPool,
                                  unsigned int miniBatchSize,
+                                 bool parallel,
                                  unsigned int seed = 0);
     void InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel);
 };
