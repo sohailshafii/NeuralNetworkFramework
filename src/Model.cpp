@@ -67,12 +67,29 @@ void Model::Train(const ImagesLoader& imagesLoader,
         CreateRandomMiniBatches(imagesLoader, miniBatches, threadPool, modelParams.miniBatchSize,
                                 parallel, currentSeed);
         
-        // TODO: loop per mini batch
+        float costTotal = 0.0f;
         
-        // TODO cost avg
+        size_t numMiniBatches = miniBatches.size();
+        for (size_t batchIndex = 0; batchIndex < numMiniBatches; batchIndex++) {
+            const auto& miniBatchX = miniBatches[batchIndex].miniBatchX;
+            const auto& miniBatchY = miniBatches[batchIndex].miniBatchY;
+            
+            // TODO forward prop
+            
+            // TODO compute cost
+            
+            // TODO backwards prop
+            
+            // TODO update params
+        }
         
-        // TODO decay
+        // average over costs
+        float costAverage = costTotal / numMiniBatches;
         
+        if (modelParams.decay != nullptr) {
+            // TODO
+        }
+
         // TODO print
     }
     
