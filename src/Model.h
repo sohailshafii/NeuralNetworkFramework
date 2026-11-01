@@ -45,16 +45,15 @@ public:
     } LayerInfo;
     
     const std::vector<LayerInfo>& GetLayers() const { return layers; }
-    
 private:
+    unsigned int numInputFeatures;
+    std::vector<unsigned int> numUnitsPerLayer;
+    std::vector<LayerInfo> layers;
+    
     typedef struct MiniBatch {
         std::vector<float> miniBatchX;
         std::vector<float> miniBatchY;
     } MiniBatch;
-    
-    unsigned int numInputFeatures;
-    std::vector<unsigned int> numUnitsPerLayer;
-    std::vector<LayerInfo> layers;
     
     void CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
                                  std::vector<MiniBatch>& miniBatches,
@@ -63,7 +62,7 @@ private:
                                  bool parallel,
                                  unsigned int seed = 0);
     
-    
-    
     void InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel);
+    
+    friend class ModelTestsFixture;
 };

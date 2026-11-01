@@ -55,8 +55,8 @@ protected:
 
 TEST_F(ImageLoaderTest, ParallelLoadMatchesSerial) {
     ThreadPool pool(4);
-    ImageLoader serial(positiveLabel, folder.string(), pool, false);
-    ImageLoader parallel(positiveLabel, folder.string(), pool, true);
+    ImagesLoader serial(positiveLabel, folder.string(), pool, false);
+    ImagesLoader parallel(positiveLabel, folder.string(), pool, true);
 
     ASSERT_EQ(serial.GetFileNames().size(), 6u);
     EXPECT_EQ(serial.GetFileNames(), parallel.GetFileNames());
@@ -66,8 +66,8 @@ TEST_F(ImageLoaderTest, ParallelLoadMatchesSerial) {
 
 TEST_F(ImageLoaderTest, ParallelNormalizeMatchesSerial) {
     ThreadPool pool(4);
-    ImageLoader serial(positiveLabel, folder.string(), pool, false);
-    ImageLoader parallel(positiveLabel, folder.string(), pool, false);
+    ImagesLoader serial(positiveLabel, folder.string(), pool, false);
+    ImagesLoader parallel(positiveLabel, folder.string(), pool, false);
     ASSERT_EQ(serial.GetData(), parallel.GetData());
 
     serial.NormalizeData(pool, false);
