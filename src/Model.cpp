@@ -102,75 +102,70 @@ void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
     const auto& originalYValues = imagesLoader.GetYValues();
     const auto& originalXValues = imagesLoader.GetData();
     
-    std::vector<float> xValues(originalXValues.size());
-    std::vector<float> yValues(originalYValues.size());
-    // now we need to shuffle the data based on the perm indices.
-    // TODO: just do all of this in one worker below -- why shuffle, copy, then copy again?
+    miniBatches.resize(numCompleteMiniBatches);
     if (parallel) {
-        std::cout << "Shuffling samples in parallel...\n";
-        auto worker = [&xValues, &yValues, &originalXValues,
-                        &originalYValues, &samplesPerm, numFeatures](size_t sampleBeg, size_t sampleEnd) {
-            for (size_t i = sampleBeg; i < sampleEnd; i++) {
-                size_t permIndex = samplesPerm[i];
-                memcpy(xValues.data() + (i * numFeatures),
-                       originalXValues.data() + (permIndex * numFeatures),
-                       numFeatures * sizeof(float));
-                yValues[i] = originalYValues[permIndex];
-            }
-        };
-        threadPool.ParallelFor(m, worker);
-    }
-    else {
-        std::cout << "Shuffling samples in serial...\n";
-        for (size_t i = 0; i < m; i++) {
-            size_t permIndex = samplesPerm[i];
-            memcpy(xValues.data() + (i * numFeatures),
-                   originalXValues.data() + (permIndex * numFeatures),
-                   numFeatures * sizeof(float));
-            yValues[i] = originalYValues[permIndex];
-        }
-    }
-    
-    assert(xValues.size() >= numFeatures * numCompleteMiniBatches);
-    assert(yValues.size() >= numCompleteMiniBatches);
-
-    // we need the size of batch size in bytes for features, and this requires knowing the number of
-    // features per image * mini-batch-size * sizeof_float
-    unsigned int featBatchSizeBytes = numFeatures * miniBatchSize * sizeof(float);
-    unsigned int outputBatchSizeBytes = miniBatchSize * sizeof(float);
-    
-    if (parallel) {
-        miniBatches.resize(numCompleteMiniBatches);
-        std::cout << "Building batches in parallel...\n";
-        auto batchWorker = [&xValues, &yValues, &miniBatches, numFeatures, miniBatchSize,
-                            featBatchSizeBytes, outputBatchSizeBytes]
-                            (size_t batchBegin, size_t batchEnd) {
-            std::vector<float> featureChunk(numFeatures * miniBatchSize);
-            std::vector<float> outputChunk(miniBatchSize);
-            for(size_t i = batchBegin; i < batchEnd; i++) {
-                size_t sampleIndex = i * miniBatchSize;
-                size_t currFeatureOffset = sampleIndex * numFeatures;
+        auto batchWorker = [&originalXValues, &originalYValues, &miniBatches,
+                            &samplesPerm, numFeatures, miniBatchSize]
+                            (size_t batchBeginIndex, size_t batchEndIndex) {
+            size_t samplesPerBatch = numFeatures * miniBatchSize;
+            std::vector<float> featureBatch(samplesPerBatch);
+            std::vector<float> outputBatch(miniBatchSize);
+            
+            size_t featSampleSizeBytes = numFeatures * sizeof(float);
+            for (size_t batchIndex = batchBeginIndex; batchIndex < batchEndIndex; batchIndex++) {
+                // loop through samples in batch
+                size_t batchSampleBeginIndex = batchIndex * miniBatchSize;
+                size_t batchSampleEndIndex = batchSampleBeginIndex + miniBatchSize;
                 
-                memcpy(featureChunk.data(), xValues.data() + currFeatureOffset, featBatchSizeBytes);
-                memcpy(outputChunk.data(), yValues.data() + sampleIndex, outputBatchSizeBytes);
-
-                miniBatches[i] = MiniBatch{featureChunk, outputChunk};
+                for (size_t batchSampleI = batchSampleBeginIndex; batchSampleI < batchSampleEndIndex;
+                     batchSampleI++) {
+                    // key: apply perm!
+                    size_t permIndex = samplesPerm[batchSampleI];
+                    size_t currFeatureOffset = permIndex * numFeatures;
+                    
+                    size_t offsetOutSampleBatch = (batchSampleI - batchSampleBeginIndex) * numFeatures;
+                    size_t offsetOutBatch = (batchSampleI - batchSampleBeginIndex);
+                    memcpy(featureBatch.data() + offsetOutSampleBatch,
+                           originalXValues.data() + currFeatureOffset,
+                           featSampleSizeBytes);
+                    memcpy(outputBatch.data() + offsetOutBatch,
+                           originalYValues.data() + permIndex,
+                           sizeof(float));
+                }
+                
+                miniBatches[batchIndex] = MiniBatch{featureBatch, outputBatch};
             }
         };
         threadPool.ParallelFor(numCompleteMiniBatches, batchWorker);
     }
     else {
-        std::cout << "Building batches in serial...\n";
-        std::vector<float> featureChunk(numFeatures * miniBatchSize);
-        std::vector<float> outputChunk(miniBatchSize);
-        for(unsigned int i = 0; i < numCompleteMiniBatches; i++) {
-            unsigned int sampleIndex = i * miniBatchSize;
-            unsigned int currFeatureOffset = sampleIndex * numFeatures;
+        size_t samplesPerBatch = numFeatures * miniBatchSize;
+        std::vector<float> featureBatch(samplesPerBatch);
+        std::vector<float> outputBatch(miniBatchSize);
+        
+        size_t featSampleSizeBytes = numFeatures * sizeof(float);
+        for (size_t batchIndex = 0; batchIndex < numCompleteMiniBatches; batchIndex++) {
+            // loop through samples in batch
+            size_t batchSampleBeginIndex = batchIndex * miniBatchSize;
+            size_t batchSampleEndIndex = batchSampleBeginIndex + miniBatchSize;
             
-            memcpy(featureChunk.data(), xValues.data() + currFeatureOffset, featBatchSizeBytes);
-            memcpy(outputChunk.data(), yValues.data() + sampleIndex, outputBatchSizeBytes);
-
-            miniBatches.emplace_back(MiniBatch{featureChunk, outputChunk});
+            for (size_t batchSampleI = batchSampleBeginIndex; batchSampleI < batchSampleEndIndex;
+                 batchSampleI++) {
+                // key: apply perm!
+                size_t permIndex = samplesPerm[batchSampleI];
+                size_t currFeatureOffset = permIndex * numFeatures;
+                
+                size_t offsetOutSampleBatch = (batchSampleI - batchSampleBeginIndex) * numFeatures;
+                size_t offsetOutBatch = (batchSampleI - batchSampleBeginIndex);
+                memcpy(featureBatch.data() + offsetOutSampleBatch,
+                       originalXValues.data() + currFeatureOffset,
+                       featSampleSizeBytes);
+                memcpy(outputBatch.data() + offsetOutBatch,
+                       originalYValues.data() + permIndex,
+                       sizeof(float));
+            }
+            
+            miniBatches[batchIndex] = MiniBatch{featureBatch, outputBatch};
         }
     }
     
@@ -181,9 +176,9 @@ void Model::CreateRandomMiniBatches(const ImagesLoader& imagesLoader,
         size_t numRemainingSamples = m - lastOutputOffset;
         std::vector<float> lastFeatChunk(numFeatures * numRemainingSamples);
         std::vector<float> lastOutputChunk(numRemainingSamples);
-        memcpy(lastFeatChunk.data(), xValues.data() + lastFeatureOffset,
+        memcpy(lastFeatChunk.data(), originalXValues.data() + lastFeatureOffset,
                numFeatures * numRemainingSamples * sizeof(float));
-        memcpy(lastOutputChunk.data(), yValues.data() + lastOutputOffset,
+        memcpy(lastOutputChunk.data(), originalYValues.data() + lastOutputOffset,
                numRemainingSamples * sizeof(float));
         miniBatches.emplace_back(MiniBatch{lastFeatChunk, lastOutputChunk});
     }

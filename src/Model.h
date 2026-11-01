@@ -62,5 +62,8 @@ private:
                                  unsigned int miniBatchSize,
                                  bool parallel,
                                  unsigned int seed = 0);
+    
+    
+    
     void InitializeWeightsAndBiases(ThreadPool& threadPool, unsigned int seed, bool parallel);
 };
